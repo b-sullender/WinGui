@@ -30,7 +30,7 @@ double dpi_MulDiv(double nNumber, double nNumerator, double nDenominator)
 
 double dpi_PixelsToDips(double pixels, double monitorDpi)
 {
-	return pixels / (monitorDpi / GLOBAL_APPLICATION_DPI);
+	return pixels / (monitorDpi / WINGUI_APPLICATION_DPI);
 }
 
 void dpi_ResizeFont(HWND hWnd, int monitorDpi, DPI_VIRTUAL_INFO* virDpi)
@@ -39,13 +39,12 @@ void dpi_ResizeFont(HWND hWnd, int monitorDpi, DPI_VIRTUAL_INFO* virDpi)
 	HFONT hFontNew;
 	LOGFONT font;
 
-	font = {};
 	hFontOld = GetWindowFont(hWnd);
 
 	if (virDpi->lpFont != 0)
 	{
 		memcpy(&font, virDpi->lpFont, sizeof(LOGFONT));
-		font.lfHeight = (LONG)-dpi_MulDiv(virDpi->lpFont->lfHeight, monitorDpi, GLOBAL_APPLICATION_DPI);
+		font.lfHeight = (LONG)-dpi_MulDiv(virDpi->lpFont->lfHeight, monitorDpi, WINGUI_APPLICATION_DPI);
 		hFontNew = CreateFontIndirect(&font);
 		if (hFontNew)
 		{
@@ -141,6 +140,74 @@ WINGUI_CLASS_INFO* winGui_FindClass(const WCHAR* pClassName)
 	ReleaseMutex(mutexLock);
 
 	return result;
+}
+
+//
+// This function is an alternative &/or fallback for winGui_GetDpiForWindow.
+// If the monitor has a different ratio than 16:9, then the lowest DPI between X and Y is used.
+// Cannot be implemented correctly due to how windows handles DPI changes.
+// Bugs:
+//       MonitorFromWindow does not always grab the new monitor during the WM_DPICHANGED event.
+//       The non-client area DPI updates at a different time than the client area when called in the WM_DPICHANGED event.
+//       DPI reported will be different from what is reported by windows.
+//
+// Only to be used when EnableNonClientDpiScaling is not supported. (Windows 10, version 1607)
+//
+
+UINT winGui_GetDpiForWindow_Fallback(HWND hWnd)
+{
+	HMONITOR hMonitor;
+	MONITORINFO mInfo;
+	double x_dpi, y_dpi;
+	UINT monitorDpi;
+
+	monitorDpi = 0;
+
+	hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+	if (hMonitor)
+	{
+		memset(&mInfo, 0, sizeof(MONITORINFO));
+		mInfo.cbSize = sizeof(MONITORINFO);
+
+		if (GetMonitorInfo(hMonitor, &mInfo))
+		{
+			x_dpi = (((double)mInfo.rcMonitor.right - mInfo.rcMonitor.left) * (double)25.4) / (double)508;
+			y_dpi = (((double)mInfo.rcMonitor.bottom - mInfo.rcMonitor.top) * (double)25.4) / (double)285.75;
+
+			monitorDpi = (x_dpi > y_dpi) ? (UINT)y_dpi : (UINT)x_dpi;
+		}
+	}
+
+	return monitorDpi;
+}
+
+UINT winGui_GetDpiForWindow(HWND hWnd)
+{
+	UINT monitorDpi;
+
+	monitorDpi = 0;
+
+	if (pGetDpiForWindow)
+		monitorDpi = pGetDpiForWindow(hWnd);
+	else if (pGetDpiForSystem)
+		monitorDpi = pGetDpiForSystem();
+	else
+	{
+		// GetDpiForSystem is not supported so neither is EnableNonClientDpiScaling
+		monitorDpi = winGui_GetDpiForWindow_Fallback(hWnd);
+	}
+
+	if (monitorDpi == 0)
+	{
+		// Everything failed. Just use the applications DPI value.
+		monitorDpi = WINGUI_APPLICATION_DPI;
+	}
+	else if (monitorDpi < WINGUI_MINIMUM_MONITOR_DPI)
+	{
+		monitorDpi = WINGUI_MINIMUM_MONITOR_DPI;
+	}
+
+	return monitorDpi;
 }
 
 bool WinGui_Init(HINSTANCE hInstance, unsigned long flags)
@@ -278,24 +345,24 @@ void dpi_ResizeClass(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pParentSc
 				dpi_ResizeFont(control_hWnd, monitorDpi, virDpi);
 
 			if (virDpi->anchors & ANCHOR_LEFT)
-				x = (int)dpi_MulDiv(virDpi->x, monitorDpi, GLOBAL_APPLICATION_DPI);
+				x = (int)dpi_MulDiv(virDpi->x, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				x = ((pParentScale->right - pParentScale->left) - (int)dpi_MulDiv(virDpi->xOffset, monitorDpi, GLOBAL_APPLICATION_DPI));
+				x = ((pParentScale->right - pParentScale->left) - (int)dpi_MulDiv(virDpi->xOffset, monitorDpi, WINGUI_APPLICATION_DPI));
 
 			if (virDpi->anchors & ANCHOR_TOP)
-				y = (int)dpi_MulDiv(virDpi->y, monitorDpi, GLOBAL_APPLICATION_DPI);
+				y = (int)dpi_MulDiv(virDpi->y, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				y = ((pParentScale->bottom - pParentScale->top) - (int)dpi_MulDiv(virDpi->yOffset, monitorDpi, GLOBAL_APPLICATION_DPI));
+				y = ((pParentScale->bottom - pParentScale->top) - (int)dpi_MulDiv(virDpi->yOffset, monitorDpi, WINGUI_APPLICATION_DPI));
 
 			if (!(virDpi->anchors & ANCHOR_RIGHT))
-				width = (int)dpi_MulDiv(virDpi->width, monitorDpi, GLOBAL_APPLICATION_DPI);
+				width = (int)dpi_MulDiv(virDpi->width, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				width = ((pParentScale->right - pParentScale->left) - x) - (int)dpi_MulDiv(virDpi->wOffset, monitorDpi, GLOBAL_APPLICATION_DPI);
+				width = ((pParentScale->right - pParentScale->left) - x) - (int)dpi_MulDiv(virDpi->wOffset, monitorDpi, WINGUI_APPLICATION_DPI);
 
 			if (!(virDpi->anchors & ANCHOR_BOTTOM))
-				height = (int)dpi_MulDiv(virDpi->height, monitorDpi, GLOBAL_APPLICATION_DPI);
+				height = (int)dpi_MulDiv(virDpi->height, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				height = ((pParentScale->bottom - pParentScale->top) - y) - (int)dpi_MulDiv(virDpi->hOffset, monitorDpi, GLOBAL_APPLICATION_DPI);
+				height = ((pParentScale->bottom - pParentScale->top) - y) - (int)dpi_MulDiv(virDpi->hOffset, monitorDpi, WINGUI_APPLICATION_DPI);
 
 			SetWindowPos(
 				control_hWnd,
@@ -346,6 +413,7 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 {
 	RECT WinArea;
 	int monitorDpi;
+	DPI_VIRTUAL_INFO* virDpi;
 	WCHAR className[512];
 	WINGUI_CLASS_INFO* pWinGui_Class;
 	WNDPROC WndProc;
@@ -353,11 +421,20 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	pWinGui_Class = 0;
 	WndProc = 0;
 
-	GetClassName(hWnd, className, 512);
-	pWinGui_Class = winGui_FindClass(className);
-	if (pWinGui_Class)
+	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virDpi != 0)
 	{
+		pWinGui_Class = virDpi->pClass;
 		WndProc = pWinGui_Class->WndProc;
+	}
+	else
+	{
+		GetClassName(hWnd, className, 512);
+		pWinGui_Class = winGui_FindClass(className);
+		if (pWinGui_Class)
+		{
+			WndProc = pWinGui_Class->WndProc;
+		}
 	}
 
 	switch (uMsg)
@@ -369,9 +446,10 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		break;
 	case WM_DPICHANGED:
 		return dpi_HandleDpiChange(hWnd, HIWORD(wParam), true, (RECT*)lParam);
+
 	case WM_SIZE:
 		GetWindowRect(hWnd, &WinArea);
-		monitorDpi = GetDpiForWindow(hWnd);
+		monitorDpi = winGui_GetDpiForWindow(hWnd);
 		dpi_HandleDpiChange(hWnd, monitorDpi, false, &WinArea);
 
 		break;
@@ -442,6 +520,8 @@ BOOL WinGui_UnregisterClass(
 	return UnregisterClass(lpClassName, hInstance);
 }
 
+// TODO... programmer may want to start the app on the screen that has the mouse.
+
 HWND WINAPI WinGui_CreateWindow(
 	_In_ DWORD dwExStyle,
 	_In_opt_ const WCHAR* lpClassName,
@@ -464,9 +544,55 @@ HWND WINAPI WinGui_CreateWindow(
 	int monitorDpi;
 	RECT parentOrigin;
 
+	virDpi = (DPI_VIRTUAL_INFO*)malloc(sizeof(DPI_VIRTUAL_INFO));
+	if (virDpi == 0) return 0;
+
+	memset(virDpi, 0, sizeof(DPI_VIRTUAL_INFO));
+
 	hWnd = CreateWindowEx(dwExStyle, lpClassName, lpWindowName, dwStyle,
 		X, Y, nWidth, nHeight,
 		hWndParent, hMenu, hInstance, lpParam);
+
+	if (hWnd == 0)
+	{
+		free(virDpi);
+		return 0;
+	}
+
+	monitorDpi = winGui_GetDpiForWindow(hWnd);
+
+	WNDCLASSEX wcex;
+	if (lpClassName != 0)
+	{
+		GetClassInfoEx(winGui_hInstance, lpClassName, &wcex);
+		if (wcex.lpfnWndProc != winGui_ChildWndProc)
+		{
+			//virDpi->originalWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)winGui_WndProc);
+			//SetClassLongPtr(hWnd, GCLP_WNDPROC, (LONG_PTR)winGui_ChildWndProc);
+		}
+	}
+
+	virDpi->x = X;
+	virDpi->y = Y;
+	virDpi->width = nWidth;
+	virDpi->height = nHeight;
+	virDpi->monitorDpi = monitorDpi;
+	virDpi->pClass = winGui_FindClass(lpClassName);
+
+	virDpi->lpFont = (LOGFONT*)malloc(sizeof(LOGFONT));
+	if (virDpi->lpFont)
+	{
+		if (lpFont)
+			memcpy(virDpi->lpFont, lpFont, sizeof(LOGFONT));
+		else
+		{
+			memset(virDpi->lpFont, 0, sizeof(LOGFONT));
+			winGui_GetdefaultFont(virDpi->lpFont, WINGUI_APPLICATION_DPI);
+			dpi_ResizeFont(hWnd, monitorDpi, virDpi);
+		}
+	}
+
+	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)virDpi);
 
 	if (hWnd)
 	{
@@ -474,107 +600,98 @@ HWND WINAPI WinGui_CreateWindow(
 		{
 			if (!bClientSize)
 			{
-				monitorDpi = GetDpiForWindow(hWnd);
-				width = (int)dpi_MulDiv(nWidth, monitorDpi, GLOBAL_APPLICATION_DPI);
-				height = (int)dpi_MulDiv(nHeight, monitorDpi, GLOBAL_APPLICATION_DPI);
-				SetWindowPos(hWnd, NULL, 0, 0,
-					width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+				if (!(dwStyle & WS_MAXIMIZE))
+				{
+					width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+					height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+					SetWindowPos(hWnd, NULL, 0, 0,
+						width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+				}
 			}
 			else
 			{
-				RECT WinArea;
-				RECT ClientArea;
+				if (!(dwStyle & WS_MAXIMIZE))
+				{
+					RECT WinArea;
+					RECT ClientArea;
 
-				monitorDpi = GetDpiForWindow(hWnd);
+					GetWindowRect(hWnd, &WinArea);
+					GetClientRect(hWnd, &ClientArea);
 
-				GetWindowRect(hWnd, &WinArea);
-				GetClientRect(hWnd, &ClientArea);
+					int xExtra = WinArea.right - WinArea.left - ClientArea.right;
+					int yExtra = WinArea.bottom - WinArea.top - ClientArea.bottom;
 
-				int xExtra = WinArea.right - WinArea.left - ClientArea.right;
-				int yExtra = WinArea.bottom - WinArea.top - ClientArea.bottom;
+					ClientArea.right = ClientArea.left + (LONG)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+					ClientArea.bottom = ClientArea.top + (LONG)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
 
-				ClientArea.right = ClientArea.left + (LONG)dpi_MulDiv(nWidth, monitorDpi, GLOBAL_APPLICATION_DPI);
-				ClientArea.bottom = ClientArea.top + (LONG)dpi_MulDiv(nHeight, monitorDpi, GLOBAL_APPLICATION_DPI);
+					int NewWidth = ClientArea.right - ClientArea.left;
+					int NewHeight = ClientArea.bottom - ClientArea.top;
 
-				int NewWidth = ClientArea.right - ClientArea.left;
-				int NewHeight = ClientArea.bottom - ClientArea.top;
-
-				SetWindowPos(hWnd, NULL, WinArea.right, WinArea.top,
-					NewWidth + xExtra, NewHeight + yExtra, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+					SetWindowPos(hWnd, NULL, WinArea.right, WinArea.top,
+						NewWidth + xExtra, NewHeight + yExtra, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+				}
 			}
 		}
 		else
 		{
-			virDpi = (DPI_VIRTUAL_INFO*)malloc(sizeof(DPI_VIRTUAL_INFO));
-			if (virDpi != 0)
+			virDpi->anchors = ANCHOR_TOP | ANCHOR_LEFT;
+
+			if (hWndParent)
 			{
-				memset(virDpi, 0, sizeof(DPI_VIRTUAL_INFO));
+				GetWindowRect(hWndParent, &parentOrigin);
 
-				WNDCLASSEX wcex;
-				if (lpClassName != 0)
-				{
-					GetClassInfoEx(winGui_hInstance, lpClassName, &wcex);
-					if (wcex.lpfnWndProc != winGui_ChildWndProc)
-					{
-						//virDpi->originalWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)winGui_WndProc);
-						//SetClassLongPtr(hWnd, GCLP_WNDPROC, (LONG_PTR)winGui_ChildWndProc);
-					}
-				}
+				x = (int)dpi_MulDiv(X, monitorDpi, WINGUI_APPLICATION_DPI);
+				y = (int)dpi_MulDiv(Y, monitorDpi, WINGUI_APPLICATION_DPI);
+				width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+				height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
 
-				virDpi->x = X;
-				virDpi->y = Y;
-				virDpi->width = nWidth;
-				virDpi->height = nHeight;
+				virDpi->xOffset = (long)dpi_PixelsToDips(
+					(double)((double)parentOrigin.right - parentOrigin.left) - x, monitorDpi);
+				virDpi->yOffset = (long)dpi_PixelsToDips(
+					(double)((double)parentOrigin.bottom - parentOrigin.top) - y, monitorDpi);
+				virDpi->wOffset = (long)dpi_PixelsToDips(
+					(double)((double)parentOrigin.right - parentOrigin.left) - ((double)x + width), monitorDpi);
+				virDpi->hOffset = (long)dpi_PixelsToDips(
+					(double)((double)parentOrigin.bottom - parentOrigin.top) - ((double)y + height), monitorDpi);
 
-				virDpi->lpFont = (LOGFONT*)malloc(sizeof(LOGFONT));
-				if (virDpi->lpFont)
-				{
-					if (lpFont)
-						memcpy(virDpi->lpFont, lpFont, sizeof(LOGFONT));
-					else
-					{
-						memset(virDpi->lpFont, 0, sizeof(LOGFONT));
-						monitorDpi = GetDpiForWindow(hWnd);
-						winGui_GetdefaultFont(virDpi->lpFont, GLOBAL_APPLICATION_DPI);
-						dpi_ResizeFont(hWnd, monitorDpi, virDpi);
-					}
-				}
-
-				virDpi->anchors = ANCHOR_TOP | ANCHOR_LEFT;
-
-				if (hWndParent)
-				{
-					monitorDpi = GetDpiForWindow(hWnd);
-					GetWindowRect(hWndParent, &parentOrigin);
-
-					x = (int)dpi_MulDiv(X, monitorDpi, GLOBAL_APPLICATION_DPI);
-					y = (int)dpi_MulDiv(Y, monitorDpi, GLOBAL_APPLICATION_DPI);
-					width = (int)dpi_MulDiv(nWidth, monitorDpi, GLOBAL_APPLICATION_DPI);
-					height = (int)dpi_MulDiv(nHeight, monitorDpi, GLOBAL_APPLICATION_DPI);
-
-					virDpi->xOffset = (long)dpi_PixelsToDips(
-						(double)((double)parentOrigin.right - parentOrigin.left) - x, monitorDpi);
-					virDpi->yOffset = (long)dpi_PixelsToDips(
-						(double)((double)parentOrigin.bottom - parentOrigin.top) - y, monitorDpi);
-					virDpi->wOffset = (long)dpi_PixelsToDips(
-						(double)((double)parentOrigin.right - parentOrigin.left) - ((double)x + width), monitorDpi);
-					virDpi->hOffset = (long)dpi_PixelsToDips(
-						(double)((double)parentOrigin.bottom - parentOrigin.top) - ((double)y + height), monitorDpi);
-
-					SetWindowPos(
-						hWnd,
-						nullptr,
-						x,
-						y,
-						width,
-						height,
-						SWP_NOZORDER | SWP_NOACTIVATE);
-				}
-
-				SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)virDpi);
+				SetWindowPos(
+					hWnd,
+					nullptr,
+					x,
+					y,
+					width,
+					height,
+					SWP_NOZORDER | SWP_NOACTIVATE);
 			}
 		}
 	}
 
 	return hWnd;
+}
+
+bool WinGui_SetWindowUserData(HWND hWnd, void* UserData)
+{
+	DPI_VIRTUAL_INFO* virDpi;
+
+	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virDpi)
+	{
+		virDpi->userData = UserData;
+		return true;
+	}
+
+	return false;
+}
+
+void* WinGui_GetWindowUserData(HWND hWnd)
+{
+	DPI_VIRTUAL_INFO* virDpi;
+
+	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virDpi)
+	{
+		return virDpi->userData;
+	}
+
+	return 0;
 }

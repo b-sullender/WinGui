@@ -4,13 +4,17 @@
 #include <CommCtrl.h>
 #include <math.h>
 
+// Flag Options for WinGui_Init
+
 #define WINGUI_FLAGS_NONE               0
 #define WINGUI_FLAGS_REPORT_ERRORS      1
 
 // DPI for the entire application.
 
-#define GLOBAL_APPLICATION_DPI 96
-#define CHECKBOX_INTERNAL_SIZE 12
+#define WINGUI_APPLICATION_DPI          96
+#define WINGUI_MINIMUM_MONITOR_DPI      64
+
+#define CHECKBOX_INTERNAL_SIZE          12
 
 // define WM_DPICHANGED when it doesn't exist.
 
@@ -70,12 +74,15 @@ struct _DPI_VIRTUAL_INFO
 	int y;
 	int width;
 	int height;
+	long monitorDpi;
+	WINGUI_CLASS_INFO* pClass;
 	LOGFONT* lpFont;
 	unsigned long anchors;
 	long xOffset;
 	long yOffset;
 	long wOffset;
 	long hOffset;
+	void* userData;
 };
 
 // WinGui Functions.
@@ -140,3 +147,19 @@ HWND WINAPI WinGui_CreateWindow(
 	_In_opt_ HINSTANCE hInstance,
 	_In_opt_ LPVOID lpParam,
 	_In_opt_ LOGFONT* lpFont);
+
+//
+// Set User Data
+// This function must be used in place of SetWindowLongPtr(hWnd, GWLP_USERDATA)
+//
+// Returns true for success, false otherwise
+//
+bool WinGui_SetWindowUserData(HWND hWnd, void* UserData);
+
+//
+// Get User Data
+// This function must be used in place of GetWindowLongPtr(hWnd, GWLP_USERDATA)
+//
+// Returns the user data, 0 otherwise
+//
+void* WinGui_GetWindowUserData(HWND hWnd);
