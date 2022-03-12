@@ -13,8 +13,8 @@ Example program included.
 ## Function Reference
 
 - [WinGui_Init](docs/WinGui_Init.md)
-- WinGui_RegisterClassEx
-- WinGui_UnregisterClass
+- [WinGui_RegisterClassEx](docs/WinGui_RegisterClassEx.md)
+- [WinGui_UnregisterClass](docs/WinGui_UnregisterClass.md)
 - WinGui_CreateWindow
 - WinGui_SetAnchors
 - WinGui_SetWindowUserData

@@ -1,6 +1,6 @@
 # WinGui_Init
 
-initializes WinGui
+Initializes WinGui
 
 ## Syntax
 
@@ -24,7 +24,7 @@ Type: **unsigned long**
 
 | Flag | Description |
 | --- | --- |
-| WINGUI_FLAGS_NONE | Nothing is done when WinGui fails to initialize |
+| WINGUI_FLAGS_NONE | Nothing is done when WinGui succeeds or fails to initialize |
 | WINGUI_FLAGS_REPORT_ERRORS | Fatal & Non-Fatal errors are reported to the user via MessageBox |
 
 ## Return value
@@ -40,4 +40,5 @@ Only returns false for fatal errors.
 ## Requirements
 
 |                      |
+| --- | --- |
 | WinGui Version | 1.0 |
