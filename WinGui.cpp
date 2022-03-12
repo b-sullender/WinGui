@@ -660,6 +660,7 @@ HWND WINAPI WinGui_CreateWindow(
 	_In_opt_ const WCHAR* lpClassName,
 	_In_opt_ const WCHAR* lpWindowName,
 	_In_ DWORD dwStyle,
+	_In_ int StartPosition,
 	_In_ int X,
 	_In_ int Y,
 	_In_ int nWidth,

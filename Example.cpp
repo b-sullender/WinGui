@@ -101,9 +101,9 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 
 	// Create the main window.
 
-	mainWin_hWnd = WinGui_CreateWindow(0, WinClassName, WinTitle,
-		WS_VISIBLE | WS_BORDER | WS_MINIMIZEBOX | WS_SYSMENU | WS_SIZEBOX | WS_MAXIMIZEBOX,
-		0, 0, 1000, 450, true, NULL, NULL, hInstance, NULL, NULL);
+	mainWin_hWnd = WinGui_CreateWindow(WS_EX_OVERLAPPEDWINDOW, WinClassName, WinTitle,
+		WS_VISIBLE | WS_BORDER | WS_MINIMIZEBOX | WS_SYSMENU | WS_SIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN,
+		0, CW_USEDEFAULT, CW_USEDEFAULT, 1000, 450, true, NULL, NULL, hInstance, NULL, NULL);
 
 	if (!mainWin_hWnd)
 	{
@@ -114,13 +114,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, 
 	// Create some buttons.
 
 	button1_hWnd = WinGui_CreateWindow(NULL, L"BUTTON", L"Button1", WS_VISIBLE | WS_CHILD,
-		12, 12, 68, 24, false, mainWin_hWnd, NULL, hInstance, NULL, NULL);
+		0, 12, 12, 68, 24, false, mainWin_hWnd, NULL, hInstance, NULL, NULL);
 	if (!button1_hWnd) return 0;
 
 	// Create a listview.
 
 	listview1_hWnd = WinGui_CreateWindow(WS_EX_CLIENTEDGE, WC_LISTVIEW, NULL, WS_VISIBLE | WS_VSCROLL | WS_CHILD | LVS_REPORT,
-		12, 44, 976, 200, true, mainWin_hWnd, NULL, hInstance, NULL, NULL);
+		0, 12, 44, 976, 200, true, mainWin_hWnd, NULL, hInstance, NULL, NULL);
 	if (!listview1_hWnd) return 0;
 
 	// Set extended listview styles.

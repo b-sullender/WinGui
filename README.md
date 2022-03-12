@@ -12,7 +12,7 @@ Example program included.
 
 ## Function Reference
 
-- WinGui_Init
+- [WinGui_Init](docs/WinGui_Init.md)
 - WinGui_RegisterClassEx
 - WinGui_UnregisterClass
 - WinGui_CreateWindow
