@@ -1,6 +1,6 @@
 # WinGui_RegisterClassEx
 
-Registers a window class for subsequent use in calls to the WinGui_CreateWindow function.
+Registers a window class for subsequent use in calls to the [WinGui_CreateWindow](WinGui_CreateWindow.md) function.
 
 ## Syntax
 
@@ -30,6 +30,4 @@ This function is a layer for [RegisterClassEx](https://docs.microsoft.com/en-us/
 
 ## Requirements
 
-|                      |
-| --- | --- |
-| WinGui Version | 1.0 |
+- WinGui Version 1.0

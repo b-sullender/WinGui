@@ -17,7 +17,7 @@ BOOL WinGui_UnregisterClass(
 ```
 Type: **const WCHAR\***
 
-A null-terminated string or a class atom. If lpClassName is a string, it specifies the window class name. This class name must have been registered by a previous call to the [WinGui_RegisterClassEx](docs/WinGui_RegisterClassEx.md) function.
+A null-terminated string or a class atom. If lpClassName is a string, it specifies the window class name. This class name must have been registered by a previous call to the [WinGui_RegisterClassEx](WinGui_RegisterClassEx.md) function.
 
 ```
 [in] hInstance
@@ -34,10 +34,8 @@ If the class could not be found or if a window still exists that was created wit
 
 ## Remarks
 
-This function is a layer for [UnregisterClassW](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-unregisterclassw).
+This function is a layer for [UnregisterClass](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-unregisterclassw).
 
 ## Requirements
 
-|                      |
-| --- | --- |
-| WinGui Version | 1.0 |
+- WinGui Version 1.0

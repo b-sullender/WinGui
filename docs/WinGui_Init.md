@@ -39,6 +39,4 @@ Only returns false for fatal errors.
 
 ## Requirements
 
-|                      |
-| --- | --- |
-| WinGui Version | 1.0 |
+- WinGui Version 1.0
