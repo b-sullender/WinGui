@@ -2,19 +2,19 @@
 #include <Windows.h>
 #include <windowsx.h>
 #include <CommCtrl.h>
-#include <math.h>
+
+// Version # 1.0
+
+#define WINGUI_VERSION    10
 
 // Flag Options for WinGui_Init
 
-#define WINGUI_FLAGS_NONE               0
-#define WINGUI_FLAGS_REPORT_ERRORS      1
+#define WINGUI_FLAGS_NONE                 0
+#define WINGUI_FLAGS_REPORT_ERRORS        1
 
 // DPI for the entire application.
 
-#define WINGUI_APPLICATION_DPI          96
-#define WINGUI_MINIMUM_MONITOR_DPI      64
-
-#define CHECKBOX_INTERNAL_SIZE          12
+#define WINGUI_APPLICATION_DPI            96
 
 // define WM_DPICHANGED when it doesn't exist.
 
@@ -65,10 +65,10 @@ struct _WINGUI_CLASS_INFO
 	WINGUI_CLASS_INFO* next;
 };
 
-// DPI struct for controls.
+// Window virtual info
 
-typedef struct _DPI_VIRTUAL_INFO DPI_VIRTUAL_INFO;
-struct _DPI_VIRTUAL_INFO
+typedef struct _WIN_VIR_INFO WIN_VIR_INFO;
+struct _WIN_VIR_INFO
 {
 	int x;
 	int y;
@@ -83,6 +83,7 @@ struct _DPI_VIRTUAL_INFO
 	long wOffset;
 	long hOffset;
 	void* userData;
+	bool handleResize;
 };
 
 // WinGui Functions.

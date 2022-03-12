@@ -1,0 +1,8 @@
+
+//
+// resource script.
+//
+
+#include "resource.h"
+
+IDI_ICON                    ICON         "resources/icon.ico"

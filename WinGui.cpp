@@ -33,7 +33,7 @@ double dpi_PixelsToDips(double pixels, double monitorDpi)
 	return pixels / (monitorDpi / WINGUI_APPLICATION_DPI);
 }
 
-void dpi_ResizeFont(HWND hWnd, int monitorDpi, DPI_VIRTUAL_INFO* virDpi)
+void dpi_ResizeFont(HWND hWnd, int monitorDpi, WIN_VIR_INFO* virWin)
 {
 	HFONT hFontOld;
 	HFONT hFontNew;
@@ -41,10 +41,10 @@ void dpi_ResizeFont(HWND hWnd, int monitorDpi, DPI_VIRTUAL_INFO* virDpi)
 
 	hFontOld = GetWindowFont(hWnd);
 
-	if (virDpi->lpFont != 0)
+	if (virWin->lpFont != 0)
 	{
-		memcpy(&font, virDpi->lpFont, sizeof(LOGFONT));
-		font.lfHeight = (LONG)-dpi_MulDiv(virDpi->lpFont->lfHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+		memcpy(&font, virWin->lpFont, sizeof(LOGFONT));
+		font.lfHeight = (LONG)-dpi_MulDiv(virWin->lpFont->lfHeight, monitorDpi, WINGUI_APPLICATION_DPI);
 		hFontNew = CreateFontIndirect(&font);
 		if (hFontNew)
 		{
@@ -202,9 +202,9 @@ UINT winGui_GetDpiForWindow(HWND hWnd)
 		// Everything failed. Just use the applications DPI value.
 		monitorDpi = WINGUI_APPLICATION_DPI;
 	}
-	else if (monitorDpi < WINGUI_MINIMUM_MONITOR_DPI)
+	else if (monitorDpi < WINGUI_APPLICATION_DPI)
 	{
-		monitorDpi = WINGUI_MINIMUM_MONITOR_DPI;
+		monitorDpi = WINGUI_APPLICATION_DPI;
 	}
 
 	return monitorDpi;
@@ -314,23 +314,44 @@ DpiAwarenessSet:
 
 bool WINAPI WinGui_SetAnchors(HWND hWnd, unsigned long anchors)
 {
-	DPI_VIRTUAL_INFO* virDpi;
+	WIN_VIR_INFO* virWin;
 
-	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	if (virDpi)
+	virWin = (WIN_VIR_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virWin)
 	{
-		virDpi->anchors = anchors;
+		virWin->anchors = anchors;
 		return true;
 	}
 
 	return false;
 }
 
-void dpi_ResizeClass(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pParentScale, const WCHAR* className)
+void winGui_UpdateHeaderForDpiChange(HWND hWnd, WIN_VIR_INFO* virWin, int old_monitorDpi, int monitorDpi)
+{
+	HWND hWndHdr;
+	long nColumns;
+	HDITEM hdi;
+
+	hWndHdr = FindWindowEx(hWnd, nullptr, WC_HEADER, nullptr);
+	if (hWndHdr == 0) return;
+	nColumns = (int)SendMessage(hWndHdr, HDM_GETITEMCOUNT, 0, 0);
+
+	memset(&hdi, 0, sizeof(HDITEM));
+
+	for (int i = 0; i < nColumns; i++)
+	{
+		hdi.mask = HDI_WIDTH;
+		Header_GetItem(hWndHdr, i, &hdi);
+		hdi.cxy = (int)dpi_MulDiv(hdi.cxy, monitorDpi, old_monitorDpi);
+		Header_SetItem(hWndHdr, i, &hdi);
+	}
+}
+
+void winGui_ResizeClass(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pParentScale, const WCHAR* className)
 {
 	HWND control_hWnd;
-	DPI_VIRTUAL_INFO* virDpi;
-	int x, y, width, height;
+	WIN_VIR_INFO* virWin;
+	int old_monitorDpi, x, y, width, height;
 
 	control_hWnd = nullptr;
 
@@ -338,31 +359,37 @@ void dpi_ResizeClass(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pParentSc
 	{
 		control_hWnd = FindWindowEx(hWnd, control_hWnd, className, nullptr);
 
-		virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(control_hWnd, GWLP_USERDATA);
-		if (virDpi != nullptr)
+		virWin = (WIN_VIR_INFO*)GetWindowLongPtr(control_hWnd, GWLP_USERDATA);
+		if (virWin != nullptr)
 		{
 			if (dpiChanged)
-				dpi_ResizeFont(control_hWnd, monitorDpi, virDpi);
+				dpi_ResizeFont(control_hWnd, monitorDpi, virWin);
 
-			if (virDpi->anchors & ANCHOR_LEFT)
-				x = (int)dpi_MulDiv(virDpi->x, monitorDpi, WINGUI_APPLICATION_DPI);
+			if (virWin->anchors & ANCHOR_LEFT)
+				x = (int)dpi_MulDiv(virWin->x, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				x = ((pParentScale->right - pParentScale->left) - (int)dpi_MulDiv(virDpi->xOffset, monitorDpi, WINGUI_APPLICATION_DPI));
+				x = ((pParentScale->right - pParentScale->left) - (int)dpi_MulDiv(virWin->xOffset, monitorDpi, WINGUI_APPLICATION_DPI));
 
-			if (virDpi->anchors & ANCHOR_TOP)
-				y = (int)dpi_MulDiv(virDpi->y, monitorDpi, WINGUI_APPLICATION_DPI);
+			if (virWin->anchors & ANCHOR_TOP)
+				y = (int)dpi_MulDiv(virWin->y, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				y = ((pParentScale->bottom - pParentScale->top) - (int)dpi_MulDiv(virDpi->yOffset, monitorDpi, WINGUI_APPLICATION_DPI));
+				y = ((pParentScale->bottom - pParentScale->top) - (int)dpi_MulDiv(virWin->yOffset, monitorDpi, WINGUI_APPLICATION_DPI));
 
-			if (!(virDpi->anchors & ANCHOR_RIGHT))
-				width = (int)dpi_MulDiv(virDpi->width, monitorDpi, WINGUI_APPLICATION_DPI);
+			if (!(virWin->anchors & ANCHOR_RIGHT))
+				width = (int)dpi_MulDiv(virWin->width, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				width = ((pParentScale->right - pParentScale->left) - x) - (int)dpi_MulDiv(virDpi->wOffset, monitorDpi, WINGUI_APPLICATION_DPI);
+				width = ((pParentScale->right - pParentScale->left) - x) - (int)dpi_MulDiv(virWin->wOffset, monitorDpi, WINGUI_APPLICATION_DPI);
 
-			if (!(virDpi->anchors & ANCHOR_BOTTOM))
-				height = (int)dpi_MulDiv(virDpi->height, monitorDpi, WINGUI_APPLICATION_DPI);
+			if (!(virWin->anchors & ANCHOR_BOTTOM))
+				height = (int)dpi_MulDiv(virWin->height, monitorDpi, WINGUI_APPLICATION_DPI);
 			else
-				height = ((pParentScale->bottom - pParentScale->top) - y) - (int)dpi_MulDiv(virDpi->hOffset, monitorDpi, WINGUI_APPLICATION_DPI);
+				height = ((pParentScale->bottom - pParentScale->top) - y) - (int)dpi_MulDiv(virWin->hOffset, monitorDpi, WINGUI_APPLICATION_DPI);
+
+			old_monitorDpi = virWin->monitorDpi;
+			virWin->monitorDpi = monitorDpi;
+
+			if (dpiChanged)
+				winGui_UpdateHeaderForDpiChange(control_hWnd, virWin, old_monitorDpi, monitorDpi);
 
 			SetWindowPos(
 				control_hWnd,
@@ -377,7 +404,7 @@ void dpi_ResizeClass(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pParentSc
 	} while (control_hWnd != NULL);
 }
 
-UINT dpi_HandleDpiChange(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pNewScale)
+UINT winGui_WindowResizeHandler(HWND hWnd, WIN_VIR_INFO* virWin, int monitorDpi, bool dpiChanged, RECT* pNewScale)
 {
 	RECT localScale;
 
@@ -390,21 +417,27 @@ UINT dpi_HandleDpiChange(HWND hWnd, int monitorDpi, bool dpiChanged, RECT* pNewS
 	{
 		if (dpiChanged)
 		{
+			virWin->handleResize = false;
+
 			SetWindowPos(hWnd, nullptr, pNewScale->left, pNewScale->top,
 				pNewScale->right - pNewScale->left, pNewScale->bottom - pNewScale->top,
 				SWP_NOZORDER | SWP_NOACTIVATE);
+
+			virWin->handleResize = true;
 		}
 	}
 
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"STATIC");
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"BUTTON");
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"LISTBOX");
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"EDIT");
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"COMBOBOX");
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, WC_LISTVIEW);
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, PROGRESS_CLASS);
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, DATETIMEPICK_CLASS);
-	dpi_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, TRACKBAR_CLASS);
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"STATIC");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"BUTTON");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"LISTBOX");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"EDIT");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"COMBOBOX");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"SCROLLBAR");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, L"RICHEDIT_CLASS");
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, WC_LISTVIEW);
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, PROGRESS_CLASS);
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, DATETIMEPICK_CLASS);
+	winGui_ResizeClass(hWnd, monitorDpi, dpiChanged, pNewScale, TRACKBAR_CLASS);
 
 	return 0;
 }
@@ -413,7 +446,7 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 {
 	RECT WinArea;
 	int monitorDpi;
-	DPI_VIRTUAL_INFO* virDpi;
+	WIN_VIR_INFO* virWin;
 	WCHAR className[512];
 	WINGUI_CLASS_INFO* pWinGui_Class;
 	WNDPROC WndProc;
@@ -421,10 +454,10 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 	pWinGui_Class = 0;
 	WndProc = 0;
 
-	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	if (virDpi != 0)
+	virWin = (WIN_VIR_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virWin != 0)
 	{
-		pWinGui_Class = virDpi->pClass;
+		pWinGui_Class = virWin->pClass;
 		WndProc = pWinGui_Class->WndProc;
 	}
 	else
@@ -445,12 +478,89 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 
 		break;
 	case WM_DPICHANGED:
-		return dpi_HandleDpiChange(hWnd, HIWORD(wParam), true, (RECT*)lParam);
+		if (virWin)
+		{
+			return winGui_WindowResizeHandler(hWnd, virWin, HIWORD(wParam), true, (RECT*)lParam);
+		}
 
 	case WM_SIZE:
-		GetWindowRect(hWnd, &WinArea);
-		monitorDpi = winGui_GetDpiForWindow(hWnd);
-		dpi_HandleDpiChange(hWnd, monitorDpi, false, &WinArea);
+		if (virWin)
+		{
+			if (virWin->handleResize)
+			{
+				GetWindowRect(hWnd, &WinArea);
+				monitorDpi = winGui_GetDpiForWindow(hWnd);
+				winGui_WindowResizeHandler(hWnd, virWin, monitorDpi, false, &WinArea);
+			}
+		}
+
+		break;
+	case WM_DESTROY:
+		if (virWin != 0)
+		{
+			SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)0);
+
+			if (virWin->lpFont != 0)
+				free(virWin->lpFont);
+
+			free(virWin);
+		}
+
+		break;
+	case WM_NOTIFY:
+	{
+		break;
+	}
+	default:
+		break;
+	}
+
+	if (WndProc)
+		return WndProc(hWnd, uMsg, wParam, lParam);
+	else
+		return DefWindowProc(hWnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK winGui_Control_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	WIN_VIR_INFO* virWin;
+	WCHAR className[512];
+	WINGUI_CLASS_INFO* pWinGui_Class;
+	WNDPROC WndProc;
+
+	pWinGui_Class = 0;
+	WndProc = 0;
+
+	virWin = (WIN_VIR_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virWin)
+	{
+		pWinGui_Class = virWin->pClass;
+		WndProc = pWinGui_Class->WndProc;
+	}
+	else
+	{
+		GetClassName(hWnd, className, 512);
+		pWinGui_Class = winGui_FindClass(className);
+		if (pWinGui_Class)
+		{
+			WndProc = pWinGui_Class->WndProc;
+		}
+	}
+
+	switch (uMsg)
+	{
+	case WM_DESTROY:
+		if (virWin)
+		{
+			SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)WndProc);
+			SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)0);
+
+			if (virWin->lpFont != 0)
+				free(virWin->lpFont);
+
+			free(virWin);
+		}
 
 		break;
 	default:
@@ -463,11 +573,34 @@ LRESULT CALLBACK winGui_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 		return DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-LRESULT CALLBACK winGui_ChildWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+WINGUI_CLASS_INFO* winGui_RegisterInternalControl(
+	_In_ HWND ClassGateWay,
+	_In_ const WCHAR* lpClassName)
 {
-	// TODO... Handle additional features and cleanup
+	WCHAR* pClassName;
+	size_t length;
+	WINGUI_CLASS_INFO* pWinGui_Class;
 
-	return 0;
+	length = sizeof(WCHAR) + (sizeof(WCHAR) * wcslen(lpClassName));
+	pClassName = (WCHAR*)malloc(length);
+	if (pClassName == 0) return 0;
+
+	pWinGui_Class = (WINGUI_CLASS_INFO*)malloc(sizeof(WINGUI_CLASS_INFO));
+	if (pWinGui_Class == 0)
+	{
+		free(pClassName);
+		return 0;
+	}
+
+	wcscpy_s(pClassName, length / sizeof(WCHAR), lpClassName);
+
+	pWinGui_Class->className = pClassName;
+	pWinGui_Class->WndProc = (WNDPROC)GetWindowLongPtr(ClassGateWay, GWLP_WNDPROC);
+	pWinGui_Class->next = 0;
+
+	winGui_AddClass(pWinGui_Class);
+
+	return pWinGui_Class;
 }
 
 ATOM
@@ -539,15 +672,18 @@ HWND WINAPI WinGui_CreateWindow(
 	_In_opt_ LOGFONT* lpFont)
 {
 	HWND hWnd;
-	DPI_VIRTUAL_INFO* virDpi;
+	WIN_VIR_INFO* virWin;
 	int x, y, width, height;
 	int monitorDpi;
 	RECT parentOrigin;
 
-	virDpi = (DPI_VIRTUAL_INFO*)malloc(sizeof(DPI_VIRTUAL_INFO));
-	if (virDpi == 0) return 0;
+	if (lpClassName == 0)
+		return 0;
 
-	memset(virDpi, 0, sizeof(DPI_VIRTUAL_INFO));
+	virWin = (WIN_VIR_INFO*)malloc(sizeof(WIN_VIR_INFO));
+	if (virWin == 0) return 0;
+
+	memset(virWin, 0, sizeof(WIN_VIR_INFO));
 
 	hWnd = CreateWindowEx(dwExStyle, lpClassName, lpWindowName, dwStyle,
 		X, Y, nWidth, nHeight,
@@ -555,114 +691,117 @@ HWND WINAPI WinGui_CreateWindow(
 
 	if (hWnd == 0)
 	{
-		free(virDpi);
+		free(virWin);
 		return 0;
 	}
 
 	monitorDpi = winGui_GetDpiForWindow(hWnd);
 
-	WNDCLASSEX wcex;
-	if (lpClassName != 0)
-	{
-		GetClassInfoEx(winGui_hInstance, lpClassName, &wcex);
-		if (wcex.lpfnWndProc != winGui_ChildWndProc)
-		{
-			//virDpi->originalWndProc = (WNDPROC)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)winGui_WndProc);
-			//SetClassLongPtr(hWnd, GCLP_WNDPROC, (LONG_PTR)winGui_ChildWndProc);
-		}
-	}
+	virWin->x = X;
+	virWin->y = Y;
+	virWin->width = nWidth;
+	virWin->height = nHeight;
+	virWin->monitorDpi = monitorDpi;
+	virWin->pClass = winGui_FindClass(lpClassName);
 
-	virDpi->x = X;
-	virDpi->y = Y;
-	virDpi->width = nWidth;
-	virDpi->height = nHeight;
-	virDpi->monitorDpi = monitorDpi;
-	virDpi->pClass = winGui_FindClass(lpClassName);
-
-	virDpi->lpFont = (LOGFONT*)malloc(sizeof(LOGFONT));
-	if (virDpi->lpFont)
+	virWin->lpFont = (LOGFONT*)malloc(sizeof(LOGFONT));
+	if (virWin->lpFont)
 	{
 		if (lpFont)
-			memcpy(virDpi->lpFont, lpFont, sizeof(LOGFONT));
+			memcpy(virWin->lpFont, lpFont, sizeof(LOGFONT));
 		else
 		{
-			memset(virDpi->lpFont, 0, sizeof(LOGFONT));
-			winGui_GetdefaultFont(virDpi->lpFont, WINGUI_APPLICATION_DPI);
-			dpi_ResizeFont(hWnd, monitorDpi, virDpi);
+			memset(virWin->lpFont, 0, sizeof(LOGFONT));
+			winGui_GetdefaultFont(virWin->lpFont, WINGUI_APPLICATION_DPI);
+			dpi_ResizeFont(hWnd, monitorDpi, virWin);
 		}
 	}
 
-	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)virDpi);
+	SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)virWin);
 
-	if (hWnd)
+	if (!(dwStyle & WS_CHILD))
 	{
-		if (!(dwStyle & WS_CHILD))
+		if (!bClientSize)
 		{
-			if (!bClientSize)
+			if (!(dwStyle & WS_MAXIMIZE))
 			{
-				if (!(dwStyle & WS_MAXIMIZE))
-				{
-					width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
-					height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
-					SetWindowPos(hWnd, NULL, 0, 0,
-						width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-				}
-			}
-			else
-			{
-				if (!(dwStyle & WS_MAXIMIZE))
-				{
-					RECT WinArea;
-					RECT ClientArea;
-
-					GetWindowRect(hWnd, &WinArea);
-					GetClientRect(hWnd, &ClientArea);
-
-					int xExtra = WinArea.right - WinArea.left - ClientArea.right;
-					int yExtra = WinArea.bottom - WinArea.top - ClientArea.bottom;
-
-					ClientArea.right = ClientArea.left + (LONG)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
-					ClientArea.bottom = ClientArea.top + (LONG)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
-
-					int NewWidth = ClientArea.right - ClientArea.left;
-					int NewHeight = ClientArea.bottom - ClientArea.top;
-
-					SetWindowPos(hWnd, NULL, WinArea.right, WinArea.top,
-						NewWidth + xExtra, NewHeight + yExtra, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-				}
+				width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+				height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+				SetWindowPos(hWnd, NULL, 0, 0,
+					width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 			}
 		}
 		else
 		{
-			virDpi->anchors = ANCHOR_TOP | ANCHOR_LEFT;
-
-			if (hWndParent)
+			if (!(dwStyle & WS_MAXIMIZE))
 			{
-				GetWindowRect(hWndParent, &parentOrigin);
+				RECT WinArea;
+				RECT ClientArea;
 
-				x = (int)dpi_MulDiv(X, monitorDpi, WINGUI_APPLICATION_DPI);
-				y = (int)dpi_MulDiv(Y, monitorDpi, WINGUI_APPLICATION_DPI);
-				width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
-				height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+				GetWindowRect(hWnd, &WinArea);
+				GetClientRect(hWnd, &ClientArea);
 
-				virDpi->xOffset = (long)dpi_PixelsToDips(
-					(double)((double)parentOrigin.right - parentOrigin.left) - x, monitorDpi);
-				virDpi->yOffset = (long)dpi_PixelsToDips(
-					(double)((double)parentOrigin.bottom - parentOrigin.top) - y, monitorDpi);
-				virDpi->wOffset = (long)dpi_PixelsToDips(
-					(double)((double)parentOrigin.right - parentOrigin.left) - ((double)x + width), monitorDpi);
-				virDpi->hOffset = (long)dpi_PixelsToDips(
-					(double)((double)parentOrigin.bottom - parentOrigin.top) - ((double)y + height), monitorDpi);
+				int xExtra = WinArea.right - WinArea.left - ClientArea.right;
+				int yExtra = WinArea.bottom - WinArea.top - ClientArea.bottom;
 
-				SetWindowPos(
-					hWnd,
-					nullptr,
-					x,
-					y,
-					width,
-					height,
-					SWP_NOZORDER | SWP_NOACTIVATE);
+				ClientArea.right = ClientArea.left + (LONG)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+				ClientArea.bottom = ClientArea.top + (LONG)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+
+				int NewWidth = ClientArea.right - ClientArea.left;
+				int NewHeight = ClientArea.bottom - ClientArea.top;
+
+				SetWindowPos(hWnd, NULL, WinArea.right, WinArea.top,
+					NewWidth + xExtra, NewHeight + yExtra, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 			}
+		}
+
+		virWin->handleResize = true;
+	}
+	else
+	{
+		WINGUI_CLASS_INFO* pWinGui_Class;
+
+		pWinGui_Class = winGui_FindClass(lpClassName);
+		if (pWinGui_Class)
+		{
+			virWin->pClass = pWinGui_Class;
+		}
+		else
+		{
+			pWinGui_Class = winGui_RegisterInternalControl(hWnd, lpClassName);
+			virWin->pClass = pWinGui_Class;
+		}
+
+		SetWindowLongPtr(hWnd, GWLP_WNDPROC, (LONG_PTR)winGui_Control_WndProc);
+
+		virWin->anchors = ANCHOR_TOP | ANCHOR_LEFT;
+
+		if (hWndParent)
+		{
+			GetWindowRect(hWndParent, &parentOrigin);
+
+			x = (int)dpi_MulDiv(X, monitorDpi, WINGUI_APPLICATION_DPI);
+			y = (int)dpi_MulDiv(Y, monitorDpi, WINGUI_APPLICATION_DPI);
+			width = (int)dpi_MulDiv(nWidth, monitorDpi, WINGUI_APPLICATION_DPI);
+			height = (int)dpi_MulDiv(nHeight, monitorDpi, WINGUI_APPLICATION_DPI);
+
+			virWin->xOffset = (long)dpi_PixelsToDips(
+				(double)((double)parentOrigin.right - parentOrigin.left) - x, monitorDpi);
+			virWin->yOffset = (long)dpi_PixelsToDips(
+				(double)((double)parentOrigin.bottom - parentOrigin.top) - y, monitorDpi);
+			virWin->wOffset = (long)dpi_PixelsToDips(
+				(double)((double)parentOrigin.right - parentOrigin.left) - ((double)x + width), monitorDpi);
+			virWin->hOffset = (long)dpi_PixelsToDips(
+				(double)((double)parentOrigin.bottom - parentOrigin.top) - ((double)y + height), monitorDpi);
+
+			SetWindowPos(
+				hWnd,
+				nullptr,
+				x,
+				y,
+				width,
+				height,
+				SWP_NOZORDER | SWP_NOACTIVATE);
 		}
 	}
 
@@ -671,12 +810,12 @@ HWND WINAPI WinGui_CreateWindow(
 
 bool WinGui_SetWindowUserData(HWND hWnd, void* UserData)
 {
-	DPI_VIRTUAL_INFO* virDpi;
+	WIN_VIR_INFO* virWin;
 
-	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	if (virDpi)
+	virWin = (WIN_VIR_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virWin)
 	{
-		virDpi->userData = UserData;
+		virWin->userData = UserData;
 		return true;
 	}
 
@@ -685,12 +824,12 @@ bool WinGui_SetWindowUserData(HWND hWnd, void* UserData)
 
 void* WinGui_GetWindowUserData(HWND hWnd)
 {
-	DPI_VIRTUAL_INFO* virDpi;
+	WIN_VIR_INFO* virWin;
 
-	virDpi = (DPI_VIRTUAL_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-	if (virDpi)
+	virWin = (WIN_VIR_INFO*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+	if (virWin)
 	{
-		return virDpi->userData;
+		return virWin->userData;
 	}
 
 	return 0;
