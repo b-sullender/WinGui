@@ -15,7 +15,6 @@ Example program included.
 - [WinGui_Init](docs/WinGui_Init.md)
 - [WinGui_RegisterClassEx](docs/WinGui_RegisterClassEx.md)
 - [WinGui_UnregisterClass](docs/WinGui_UnregisterClass.md)
-- [WinGui_CreateWindow](docs/WinGui_CreateWindow.md)
-- WinGui_SetAnchors
-- WinGui_SetWindowUserData
-- WinGui_GetWindowUserData
+- [WinGui_CreateWindowEx](docs/WinGui_CreateWindowEx.md)
+- [WinGui_SetAnchors](docs/WinGui_SetAnchors.md)
+- [WinGui_CenterWindow](docs/WinGui_CenterWindow.md)

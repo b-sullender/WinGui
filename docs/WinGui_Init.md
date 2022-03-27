@@ -22,6 +22,8 @@ A handle to the executable that is using WinGui. This should be the same hInstan
 ```
 Type: **unsigned long**
 
+This parameter can be one of the following flags.
+
 | Flag | Description |
 | --- | --- |
 | WINGUI_FLAGS_NONE | Nothing is done when WinGui succeeds or fails to initialize |

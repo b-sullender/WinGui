@@ -5,4 +5,23 @@
 
 #include "resource.h"
 
+/////////////////////////////////////////////////////////////////////////////
+//
+// Icon
+//
+
 IDI_ICON                    ICON         "resources/icon.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_MAIN_WINDOW_MENU MENU DISCARDABLE
+BEGIN
+    POPUP "File"
+    BEGIN
+        MENUITEM "Save File",                   ID_MENU_SAVE_FILE
+    END
+    MENUITEM "Settings",                        ID_MENU_SETTINGS
+END
